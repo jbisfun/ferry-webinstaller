@@ -28,6 +28,51 @@ struct InstallProgress: Codable {
   var percent: Int
 }
 
+struct Team: Codable, Equatable {
+  var teamId: String
+  var name: String
+}
+
+struct AccountSummary: Codable, Equatable {
+  var email: String?
+  var name: String?
+  var team: Team?
+  var error: String?
+}
+
+struct TrustedNumber: Codable, Equatable, Identifiable {
+  var numberWithDialCode: String
+  var id: Int
+}
+
+/// isideload's TwoFactorCallbackParams.
+struct TwoFactorRequest: Codable, Equatable {
+  var lastError: String?
+  var unknown: Bool
+  var sms: Bool
+  var numbers: [TrustedNumber]
+  var selectedNumberId: Int?
+}
+
+struct InstallResult: Codable {
+  var signed: Bool?
+  var special: String?
+  var error: String?
+}
+
+struct SignInRequest: Codable {
+  var email: String
+  var password: String
+  var revokeCertificates: Bool
+}
+
+struct TwoFactorAnswer: Codable {
+  var code: String?
+  var sms: Int?
+  var devices: Bool?
+  var resend: Bool?
+}
+
 /// Drives the `device` page service (Resources/device-service.js), which runs the
 /// ios-webusb driver next to the page.
 @Observable
@@ -41,14 +86,23 @@ final class Installer {
   var message = ""
   var failure = ""
 
+  var account: AccountSummary?
+  var twoFactor: TwoFactorRequest?
+  var signingIn = false
+  var accountFailure = ""
+
   private let service = BrowserService("device")
   private var observation: BrowserIOOperation?
+  private var twoFactorObservation: BrowserIOOperation?
 
   func start() async {
     observation = service.observe("progress") { [self] json in
       guard let progress = try? JSONDecoder().decode(InstallProgress.self, from: Data(json.utf8)) else { return }
       stage = progress.stage
       percent = Double(progress.percent) / 100
+    }
+    twoFactorObservation = service.observe("twoFactor") { [self] json in
+      twoFactor = try? JSONDecoder().decode(TwoFactorRequest.self, from: Data(json.utf8))
     }
     await run("Looking for a device") {
       self.device = try await self.decode(DeviceSummary.self, self.service.call("restore"))
@@ -81,14 +135,51 @@ final class Installer {
 
   func install() async {
     guard let package else { return }
-    stage = "upload"
+    stage = account == nil ? "upload" : "sign"
     percent = 0
-    await run("Installing \(package.name)") {
-      _ = try await self.service.call("install")
-      self.message = "\(package.name) installed."
+    await run(account == nil ? "Installing \(package.name)" : "Signing and installing \(package.name)") {
+      let result = try await self.decode(InstallResult.self, self.service.call("install"))
+      if let error = result?.error {
+        self.failure = error
+        return
+      }
+      self.message = result?.signed == true
+        ? "\(package.name) signed with \(self.account?.email ?? "your Apple ID") and installed."
+        : "\(package.name) installed."
       try await self.refreshApps()
     }
     stage = ""
+  }
+
+  func signIn(email: String, password: String, revokeCertificates: Bool) async {
+    signingIn = true
+    accountFailure = ""
+    do {
+      let request = SignInRequest(email: email, password: password, revokeCertificates: revokeCertificates)
+      let payload = String(decoding: try JSONEncoder().encode(request), as: UTF8.self)
+      let result = try await decode(AccountSummary.self, service.call("signIn", payload))
+      if let error = result?.error {
+        accountFailure = error
+      } else {
+        account = result
+      }
+    } catch {
+      accountFailure = "Sign-in failed. See the browser console."
+    }
+    twoFactor = nil
+    signingIn = false
+  }
+
+  /// An empty answer cancels the sign-in.
+  func answerTwoFactor(_ answer: TwoFactorAnswer) async {
+    twoFactor = nil
+    let payload = (try? JSONEncoder().encode(answer)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+    _ = try? await service.call("twoFactor", payload)
+  }
+
+  func signOut() async {
+    _ = try? await service.call("signOut")
+    account = nil
   }
 
   func refreshApps() async throws {

@@ -30,6 +30,55 @@ async function curlFetch(url, init = {}) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
+// Headers Chromium won't put on a fetch Request (they never reach the shim below).
+let appleUserAgent = null;
+
+/**
+ * Routes the page's cross-origin `fetch` through libcurl.js, so code that only knows
+ * `fetch` (isideload's reqwest in the ios-webusb wasm) can talk to Apple and the
+ * anisette server. Same-origin requests use the browser as usual.
+ *
+ * Chromium strips User-Agent from Request objects, and GrandSlam wants the one that
+ * matches the anisette client info, so the shim remembers `user_agent` from the
+ * anisette server's /v3/client_info reply and adds it to requests that carry
+ * X-Mme-Client-Info.
+ */
+export function installRelayFetch() {
+  if (globalThis.fetch.ferryRelay) return;
+  const browserFetch = globalThis.fetch.bind(globalThis);
+  const relayed = async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    if (url.origin === location.origin || url.protocol !== "https:") return browserFetch(input, init);
+    const headers = Object.fromEntries(request.headers);
+    if (appleUserAgent && headers["x-mme-client-info"] && !headers["user-agent"]) headers["user-agent"] = appleUserAgent;
+    const hasBody = !["GET", "HEAD"].includes(request.method);
+    const body = hasBody ? new Uint8Array(await request.arrayBuffer()) : undefined;
+    const lib = await curl();
+    const response = await lib.fetch(request.url, { method: request.method, headers, body, redirect: request.redirect });
+    const bytes = await response.arrayBuffer();
+    if (url.pathname.endsWith("/v3/client_info") && response.ok) {
+      try {
+        appleUserAgent = JSON.parse(new TextDecoder().decode(bytes)).user_agent ?? appleUserAgent;
+      } catch {}
+    }
+    // libcurl hands back the decoded body; don't let anyone decode it twice.
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.delete("content-encoding");
+    responseHeaders.delete("content-length");
+    const rebuilt = new Response(response.status === 204 || response.status === 304 ? null : bytes, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    });
+    // A constructed Response has url "", and reqwest parses it.
+    Object.defineProperty(rebuilt, "url", { value: response.url || request.url });
+    return rebuilt;
+  };
+  relayed.ferryRelay = true;
+  globalThis.fetch = relayed;
+}
+
 export const http = {
   get: (url, headers) => curlFetch(url, { method: "GET", headers }),
   post: (url, body, headers) => curlFetch(url, { method: "POST", body, headers }),
@@ -73,4 +122,4 @@ export function service() {
 }
 
 // For the page console and tests.
-globalThis.ferryAnisette = { anisette, curl, relayUrl, http, servers };
+globalThis.ferryAnisette = { anisette, curl, relayUrl, http, servers, installRelayFetch };

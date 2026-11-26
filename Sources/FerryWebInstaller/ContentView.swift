@@ -2,10 +2,15 @@ import SwiftUI
 
 struct ContentView: View {
   @State private var installer = Installer()
+  @State private var email = ""
+  @State private var password = ""
+  @State private var revokeCertificates = false
+  @State private var code = ""
 
   var body: some View {
     NavigationStack {
       Form {
+        accountSection
         deviceSection
         if installer.device != nil {
           packageSection
@@ -41,6 +46,60 @@ struct ContentView: View {
     }
   }
 
+  private var accountSection: some View {
+    Section {
+      if let account = installer.account {
+        LabeledContent("Apple ID", value: account.email ?? "")
+        if let name = account.name, !name.isEmpty { LabeledContent("Name", value: name) }
+        if let team = account.team { LabeledContent("Team", value: "\(team.name) (\(team.teamId))") }
+        Button("Sign Out", role: .destructive) { Task { await installer.signOut() } }
+      } else if let request = installer.twoFactor {
+        if let error = request.lastError { Text(error).foregroundStyle(.red) }
+        Text(request.sms
+          ? "Enter the code sent to \(request.numbers.first { $0.id == request.selectedNumberId }?.numberWithDialCode ?? "your phone")."
+          : "Enter the verification code shown on your Apple devices.")
+        TextField("Code", text: $code)
+        Button("Verify") {
+          let entered = code
+          code = ""
+          Task { await installer.answerTwoFactor(TwoFactorAnswer(code: entered)) }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(code.count < 6)
+        if request.sms || request.unknown {
+          Button("Send to My Devices") { Task { await installer.answerTwoFactor(TwoFactorAnswer(devices: true)) } }
+        }
+        ForEach(request.numbers.filter { $0.id != request.selectedNumberId }) { number in
+          Button("Text \(number.numberWithDialCode)") {
+            Task { await installer.answerTwoFactor(TwoFactorAnswer(sms: number.id)) }
+          }
+        }
+        if !request.unknown {
+          Button("Resend Code") { Task { await installer.answerTwoFactor(TwoFactorAnswer(resend: true)) } }
+        }
+        Button("Cancel", role: .destructive) { Task { await installer.answerTwoFactor(TwoFactorAnswer()) } }
+      } else {
+        TextField("Email", text: $email)
+        SecureField("Password", text: $password)
+        Toggle("Revoke an old certificate if the account has too many", isOn: $revokeCertificates)
+        Button(installer.signingIn ? "Signing In..." : "Sign In") {
+          let entered = password
+          password = ""
+          Task { await installer.signIn(email: email, password: entered, revokeCertificates: revokeCertificates) }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(installer.signingIn || email.isEmpty || password.isEmpty)
+      }
+      if !installer.accountFailure.isEmpty {
+        Text(installer.accountFailure).foregroundStyle(.red)
+      }
+    } header: {
+      Text("Apple ID")
+    } footer: {
+      Text("Optional. With an Apple ID, apps are signed in this browser and work for 7 days (free accounts). Your password goes only to Apple: TLS runs in the page, and the relay forwards encrypted bytes.")
+    }
+  }
+
   private var packageSection: some View {
     Section {
       if let package = installer.package {
@@ -54,12 +113,12 @@ struct ContentView: View {
       }
       .disabled(!installer.busy.isEmpty)
       if installer.package != nil {
-        Button("Install") { Task { await installer.install() } }
+        Button(installer.account == nil ? "Install" : "Sign and Install") { Task { await installer.install() } }
           .buttonStyle(.borderedProminent)
           .disabled(!installer.busy.isEmpty)
       }
       if !installer.stage.isEmpty {
-        ProgressView(installer.stage == "upload" ? "Uploading" : "Installing", value: installer.percent)
+        ProgressView(installer.stage == "sign" ? "Signing" : installer.stage == "upload" ? "Uploading" : "Installing", value: installer.percent)
       }
       if !installer.message.isEmpty {
         Text(installer.message).foregroundStyle(.green)
@@ -67,7 +126,9 @@ struct ContentView: View {
     } header: {
       Text("Install")
     } footer: {
-      Text("The IPA must already be signed for this device (for example with ferry).")
+      Text(installer.account == nil
+        ? "Without an Apple ID the IPA must already be signed for this device."
+        : "Registers this device and App IDs with your team, signs the IPA here and installs it.")
     }
   }
 

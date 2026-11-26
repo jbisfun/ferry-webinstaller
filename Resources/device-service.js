@@ -19,6 +19,19 @@
 
     let device = null;
     let ipa = null;
+    let account = null;
+    let pendingTwoFactor = null;
+    // Errors go back as {"error": "..."} so Swift can show Apple's message (a
+    // thrown error only reaches Swift as a code).
+    const reply = async (work) => {
+      try {
+        return JSON.stringify((await work()) ?? {});
+      } catch (error) {
+        console.error(error);
+        return JSON.stringify({ error: String(error?.message ?? error) });
+      }
+    };
+    const accountSummary = async () => ({ email: account.email, name: account.name, team: await account.team() });
 
     const summary = async () => {
       const value = (key) => device.getValue(key).catch(() => null);
@@ -85,10 +98,62 @@
         });
       },
 
-      async install() {
-        if (!device) throw new Error("no device");
-        if (!ipa) throw new Error("no ipa");
-        await device.install(ipa, (stage, percent) => emit("progress", JSON.stringify({ stage, percent })));
+      // Signs with the Apple ID when one is signed in (isideload: registers the device,
+      // App IDs and profile, signs, installs), otherwise installs the IPA as it is.
+      install: () =>
+        reply(async () => {
+          if (!device) throw new Error("no device");
+          if (!ipa) throw new Error("no ipa");
+          if (!account) {
+            await device.install(ipa, (stage, percent) => emit("progress", JSON.stringify({ stage, percent })));
+            return { signed: false };
+          }
+          emit("progress", JSON.stringify({ stage: "sign", percent: 0 }));
+          const special = await account.install(device, ipa, (fraction) =>
+            emit("progress", JSON.stringify({ stage: "sign", percent: Math.round(fraction * 100) })),
+          );
+          return { signed: true, special: special ?? null };
+        }),
+
+      // The signed-in Apple ID ({} if none).
+      account: () => reply(async () => (account ? accountSummary() : {})),
+
+      // payload: {"email", "password", "revokeCertificates"}. While Apple waits for a
+      // code this emits "twoFactor" with isideload's params and waits for twoFactor().
+      signIn: (payload) =>
+        reply(async () => {
+          const { email, password, revokeCertificates } = JSON.parse(payload);
+          const net = await import("./anisette.js");
+          net.installRelayFetch();
+          account = await driver.AppleAccount.login(email, password, {
+            anisetteUrl: net.server(),
+            revokeCertificates: !!revokeCertificates,
+            twoFactor: (params) =>
+              new Promise((resolve) => {
+                pendingTwoFactor = resolve;
+                emit("twoFactor", JSON.stringify(params));
+              }),
+          });
+          return accountSummary();
+        }),
+
+      // payload: {"code"} | {"sms": id} | {"devices": true} | {"resend": true} | {} (abort).
+      twoFactor(payload) {
+        const answer = JSON.parse(payload || "{}");
+        const resolve = pendingTwoFactor;
+        pendingTwoFactor = null;
+        resolve?.(
+          answer.code ? { SubmitCode: answer.code }
+          : answer.sms != null ? { SendSms: answer.sms }
+          : answer.devices ? "SendToDevices"
+          : answer.resend ? "ResendCode"
+          : "Abort",
+        );
+      },
+
+      signOut() {
+        account?.free();
+        account = null;
       },
 
       async apps() {

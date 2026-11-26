@@ -32,7 +32,7 @@
       try {
         return JSON.stringify((await work()) ?? {});
       } catch (error) {
-        console.error(error);
+        console.error(`[ferry] ${String(error?.message ?? error)}`, error);
         return JSON.stringify({ error: String(error?.message ?? error) });
       }
     };

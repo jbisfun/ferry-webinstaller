@@ -10,17 +10,18 @@ struct ContentView: View {
   var body: some View {
     NavigationStack {
       Form {
-        accountSection
-        deviceSection
-        if installer.device != nil {
-          packageSection
-          appsSection
-        }
+        // Status first: the installed-apps list below can push it off screen.
         if !installer.busy.isEmpty {
           Section { ProgressView(installer.busy) }
         }
         if !installer.failure.isEmpty {
           Section { Text(installer.failure).foregroundStyle(.red) }
+        }
+        accountSection
+        deviceSection
+        if installer.device != nil {
+          packageSection
+          appsSection
         }
       }
       .navigationTitle("Ferry")

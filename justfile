@@ -26,3 +26,12 @@ build: driver anisette
 # The release bundle, served
 run: driver anisette
     ./swiftweb run
+
+# Isolated Web App (Direct Sockets: Apple and anisette traffic goes straight out, no relay).
+# Serves the IWA with Chromium's IWA headers on :8794 for a dev-mode proxy install.
+iwa: build
+    cd web && bun iwa.mjs serve
+
+# Signed web bundle .build/iwa/ferry.swbn (key: ~/.config/ferry-webinstaller/iwa-key.pem)
+iwa-bundle: build
+    cd web && bun iwa.mjs bundle

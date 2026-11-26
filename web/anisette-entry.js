@@ -1,11 +1,13 @@
 // Anisette for the `anisette` page service (Swift's `BrowserService("anisette")`),
 // from a public SideStore anisette v3 server. Requests to the server and to Apple go
 // through libcurl.js: TLS runs here in wasm and reaches the network as raw TCP over
-// the Wisp relay (relay.mjs), because neither sends CORS headers. The provisioning
+// the Wisp relay (relay.mjs), because neither sends CORS headers. Installed as an
+// Isolated Web App (just iwa) it goes over Direct Sockets instead: no relay. The provisioning
 // websocket goes straight to the server (websockets aren't subject to CORS).
 // libcurl.js built from source with Apple Root CA + G3 in its CA bundle (see vendor/README.md).
 import { libcurl } from "./vendor/libcurl_full.mjs";
 import { RemoteAnisette, DEFAULT_SERVER, SERVER_LIST } from "./remote-anisette.js";
+import { DirectSocketTransport, directSocketsAvailable } from "./direct-socket.js";
 
 export function relayUrl() {
   if (localStorage.ferryRelay) return localStorage.ferryRelay;
@@ -13,10 +15,19 @@ export function relayUrl() {
   return `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/wisp/`;
 }
 
+/** How libcurl reaches the network: Direct Sockets in the Isolated Web App, else the Wisp relay. */
+export const transport = () => (directSocketsAvailable() ? "direct-sockets" : "wisp");
+
 let curlReady;
 export function curl() {
   curlReady ??= (async () => {
-    libcurl.set_websocket(relayUrl());
+    if (directSocketsAvailable()) {
+      // libcurl appends "<host>:<port>" to this; DirectSocketTransport only reads that part.
+      libcurl.transport = DirectSocketTransport;
+      libcurl.set_websocket("wss://direct-sockets.invalid/");
+    } else {
+      libcurl.set_websocket(relayUrl());
+    }
     await libcurl.load_wasm();
     return libcurl;
   })();
@@ -117,7 +128,7 @@ export async function servers() {
 /** The service's methods (Resources/anisette-service.js loads this lazily). */
 export function service() {
   return {
-    relay: () => relayUrl(),
+    relay: () => (directSocketsAvailable() ? "" : relayUrl()),
     setRelay(url) {
       if (url) localStorage.ferryRelay = url;
       else delete localStorage.ferryRelay;
@@ -134,4 +145,4 @@ export function service() {
 }
 
 // For the page console and tests.
-globalThis.ferryAnisette = { anisette, curl, relayUrl, http, servers, installRelayFetch, registerUserAgent };
+globalThis.ferryAnisette = { anisette, curl, relayUrl, transport, http, servers, installRelayFetch, registerUserAgent };

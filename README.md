@@ -71,3 +71,32 @@ Deployed, serve it at `/wisp/` on the same origin, or point the page at one with
 `localStorage.ferryRelay = "wss://..."`. libcurl.js is built from
 [jbisfun/libcurl.js](https://github.com/jbisfun/libcurl.js) `apple-roots`, which adds
 Apple's root CAs to its bundle (`gsa.apple.com` chains to Apple Root CA).
+
+## Without a relay: Isolated Web App
+
+Installed as an [Isolated Web App](https://github.com/WICG/isolated-web-apps), the
+page gets the Direct Sockets API (`TCPSocket`), and libcurl.js uses it as its
+transport (`web/direct-socket.js`): TLS still runs in the page, and its bytes go
+straight to Apple and the anisette server over TCP. No relay and no server of any
+kind. Outside an IWA the page falls back to the Wisp relay.
+
+```sh
+just iwa          # serves the IWA with Chromium's IWA headers on http://127.0.0.1:8794/
+just iwa-bundle   # .build/iwa/ferry.swbn, signed with ~/.config/ferry-webinstaller/iwa-key.pem
+```
+
+`web/iwa.mjs` turns the bundle into an IWA. It moves the page shell's inline
+scripts into files, because the IWA's fixed CSP has no hashes. It drops `<base>`
+(`base-uri 'none'`) and adds `/.well-known/manifest.webmanifest` with
+`direct-sockets`, `usb` and `cross-origin-isolated` in its permissions policy.
+`Resources/config.js` installs the Trusted Types default policy the IWA requires.
+The signing key fixes the app's `isolated-app://` origin, so keep it (the first
+`just iwa-bundle` creates it).
+
+To install, enable `chrome://flags/#enable-isolated-web-app-dev-mode` (Chrome,
+Chromium or Helium 157). Then, in `chrome://web-app-internals`, either install
+`ferry.swbn` under "Install IWA from Signed Web Bundle", or enter
+`http://127.0.0.1:8794/` under "Install IWA via Dev Mode Proxy". A scripted
+install also works, for example
+`--enable-features=IsolatedWebApps,IsolatedWebAppDevMode --install-isolated-web-app-from-file=.build/iwa/ferry.swbn`
+on the first start of a profile.

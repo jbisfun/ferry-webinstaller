@@ -116,7 +116,7 @@ struct ContentView: View {
         if installer.twoFactor != nil {
           Text("Enter the code shown on your iPhone, iPad or Mac. No code? On your iPhone open Settings > your name > Sign-In & Security > Get Verification Code.")
         } else {
-          Text("Optional. With an Apple ID, apps are signed in this browser and work for 7 days (free accounts). Your password goes only to Apple: TLS runs in the page, and the relay forwards encrypted bytes.")
+          Text("Optional. With an Apple ID, apps are signed in this browser and work for 7 days (free accounts). Your password goes only to Apple: TLS runs in this page, so nothing in between can read it.")
         }
       }
     }

@@ -56,6 +56,8 @@ struct ContentView: View {
       } else if let request = installer.twoFactor {
         if let error = request.lastError { Text(error).foregroundStyle(.red) }
         Text("Enter the verification code shown on your iPhone, iPad or Mac.")
+        Text("No code? On your iPhone open Settings > your name > Sign-In & Security > Get Verification Code.")
+          .foregroundStyle(.secondary)
         TextField("Code", text: $code)
         Button("Verify") {
           let entered = code
@@ -78,6 +80,9 @@ struct ContentView: View {
         }
         .buttonStyle(.borderedProminent)
         .disabled(installer.signingIn || email.isEmpty || password.isEmpty)
+      }
+      if !installer.accountNotice.isEmpty && installer.account == nil {
+        Text(installer.accountNotice).foregroundStyle(.secondary)
       }
       if !installer.accountFailure.isEmpty {
         Text(installer.accountFailure).foregroundStyle(.red)

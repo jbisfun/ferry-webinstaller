@@ -17,8 +17,10 @@
       return btoa(text);
     };
 
-    const CLIENT_INFO = "<MacBookPro18,3> <Mac OS X;26.6;25F84> <com.apple.AuthKit/1 (com.apple.akd/1.0)>";
-    const USER_AGENT = "AuthKit/1 (Macintosh; OS X 26.6) (com.apple.akd/1.0)";
+    const CURRENT_MAC = {
+      clientInfo: "<MacBookPro18,3> <Mac OS X;26.6;25F84> <com.apple.AuthKit/1 (com.apple.akd/1.0)>",
+      userAgent: "AuthKit/1 (Macintosh; OS X 26.6) (com.apple.akd/1.0)",
+    };
 
     let device = null;
     let ipa = null;
@@ -128,20 +130,39 @@
           const { email, password, revokeCertificates } = JSON.parse(payload);
           const net = await import("./anisette.js");
           net.installRelayFetch();
+          const twoFactor = (params) =>
+            new Promise((resolve) => {
+              pendingTwoFactor = resolve;
+              emit("twoFactor", JSON.stringify(params));
+            });
+          // The anisette identity is registered with Apple under one client info;
+          // a different one makes Apple refuse logins (-22410). Start over when it changes.
+          const login = (client) => {
+            const key = "ferry:anisetteClient";
+            if (localStorage.getItem(key) !== (client?.clientInfo ?? "server")) {
+              localStorage.removeItem("isideload:anisette_state");
+              localStorage.setItem(key, client?.clientInfo ?? "server");
+            }
+            if (client) net.registerUserAgent(client.clientInfo, client.userAgent);
+            return driver.AppleAccount.login(email, password, {
+              anisetteUrl: net.server(),
+              revokeCertificates: !!revokeCertificates,
+              twoFactor,
+              ...client,
+            });
+          };
           // Public anisette servers report old Macs (macOS 10.12), and for those Apple
-          // picks SMS 2FA and never pushes a code to trusted devices. Say we're a current Mac.
-          net.registerUserAgent(CLIENT_INFO, USER_AGENT);
-          account = await driver.AppleAccount.login(email, password, {
-            anisetteUrl: net.server(),
-            clientInfo: CLIENT_INFO,
-            userAgent: USER_AGENT,
-            revokeCertificates: !!revokeCertificates,
-            twoFactor: (params) =>
-              new Promise((resolve) => {
-                pendingTwoFactor = resolve;
-                emit("twoFactor", JSON.stringify(params));
-              }),
-          });
+          // picks SMS 2FA and never pushes codes to trusted devices, so first say we're
+          // a current Mac. If Apple won't take that, sign in as the server's Mac (codes
+          // then come from Settings > Sign-In & Security > Get Verification Code).
+          try {
+            account = await login(CURRENT_MAC);
+          } catch (error) {
+            if (!String(error?.message).includes("-22410")) throw error;
+            console.warn("Apple refused the current-Mac client info, retrying with the anisette server's", error);
+            emit("notice", "Retrying as the anisette server's Mac. If no code arrives, use Get Verification Code on your iPhone.");
+            account = await login(null);
+          }
           return accountSummary();
         }),
 

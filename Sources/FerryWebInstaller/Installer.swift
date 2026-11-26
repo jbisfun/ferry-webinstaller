@@ -79,10 +79,12 @@ final class Installer {
   var twoFactor: TwoFactorRequest?
   var signingIn = false
   var accountFailure = ""
+  var accountNotice = ""
 
   private let service = BrowserService("device")
   private var observation: BrowserIOOperation?
   private var twoFactorObservation: BrowserIOOperation?
+  private var noticeObservation: BrowserIOOperation?
 
   func start() async {
     observation = service.observe("progress") { [self] json in
@@ -92,6 +94,9 @@ final class Installer {
     }
     twoFactorObservation = service.observe("twoFactor") { [self] json in
       twoFactor = try? JSONDecoder().decode(TwoFactorRequest.self, from: Data(json.utf8))
+    }
+    noticeObservation = service.observe("notice") { [self] text in
+      accountNotice = text
     }
     await run("Looking for a device") {
       self.device = try await self.decode(DeviceSummary.self, self.service.call("restore"))
@@ -143,6 +148,7 @@ final class Installer {
   func signIn(email: String, password: String, revokeCertificates: Bool) async {
     signingIn = true
     accountFailure = ""
+    accountNotice = ""
     do {
       let request = SignInRequest(email: email, password: password, revokeCertificates: revokeCertificates)
       let payload = String(decoding: try JSONEncoder().encode(request), as: UTF8.self)

@@ -16,13 +16,6 @@ struct PackageSummary: Codable, Equatable {
   var size: Int
 }
 
-struct InstalledApp: Codable, Equatable, Identifiable {
-  var bundleId: String
-  var name: String
-  var version: String
-  var id: String { bundleId }
-}
-
 struct InstallProgress: Codable {
   var stage: String
   var percent: Int
@@ -68,7 +61,6 @@ struct TwoFactorAnswer: Codable {
 final class Installer {
   var device: DeviceSummary?
   var package: PackageSummary?
-  var apps: [InstalledApp] = []
   var busy = ""
   var stage = ""
   var percent = 0.0
@@ -100,7 +92,6 @@ final class Installer {
     }
     await run("Looking for a device") {
       self.device = try await self.decode(DeviceSummary.self, self.service.call("restore"))
-      if self.device != nil { try await self.refreshApps() }
     }
   }
 
@@ -108,14 +99,12 @@ final class Installer {
     await run("Unlock the device and tap Trust if asked") {
       guard let found = try await self.decode(DeviceSummary.self, self.service.call("connect")) else { return }
       self.device = found
-      try await self.refreshApps()
     }
   }
 
   func disconnect() async {
     _ = try? await service.call("disconnect")
     device = nil
-    apps = []
   }
 
   func pick() async {
@@ -140,7 +129,6 @@ final class Installer {
       self.message = result?.signed == true
         ? "\(package.name) signed with \(self.account?.email ?? "your Apple ID") and installed."
         : "\(package.name) installed."
-      try await self.refreshApps()
     }
     stage = ""
   }
@@ -175,10 +163,6 @@ final class Installer {
   func signOut() async {
     _ = try? await service.call("signOut")
     account = nil
-  }
-
-  func refreshApps() async throws {
-    apps = try await decode([InstalledApp].self, service.call("apps")) ?? []
   }
 
   private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T? {

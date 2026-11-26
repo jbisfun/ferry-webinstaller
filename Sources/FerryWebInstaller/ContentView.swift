@@ -10,7 +10,7 @@ struct ContentView: View {
   var body: some View {
     NavigationStack {
       Form {
-        // Status first: the installed-apps list below can push it off screen.
+        // Status first, above the sections it reports on.
         if !installer.busy.isEmpty {
           Section { ProgressView(installer.busy) }
         }
@@ -21,7 +21,6 @@ struct ContentView: View {
         deviceSection
         if installer.device != nil {
           packageSection
-          appsSection
         }
       }
       .navigationTitle("Ferry")
@@ -124,17 +123,6 @@ struct ContentView: View {
       Text(installer.account == nil
         ? "Without an Apple ID the IPA must already be signed for this device."
         : "Registers this device and App IDs with your team, signs the IPA here and installs it.")
-    }
-  }
-
-  private var appsSection: some View {
-    Section("Installed Apps") {
-      if installer.apps.isEmpty {
-        Text("No user apps.").foregroundStyle(.secondary)
-      }
-      ForEach(installer.apps) { app in
-        LabeledContent(app.name, value: app.version)
-      }
     }
   }
 }

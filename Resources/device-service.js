@@ -183,17 +183,5 @@
         account?.free();
         account = null;
       },
-
-      async apps() {
-        if (!device) return "[]";
-        const apps = await device.apps("User");
-        const list = Object.entries(apps).map(([bundleId, info]) => ({
-          bundleId,
-          name: info.CFBundleDisplayName ?? info.CFBundleName ?? bundleId,
-          version: info.CFBundleShortVersionString ?? info.CFBundleVersion ?? "",
-        }));
-        list.sort((a, b) => a.name.localeCompare(b.name));
-        return JSON.stringify(list);
-      },
     };
   });

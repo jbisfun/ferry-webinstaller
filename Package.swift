@@ -4,7 +4,8 @@ import PackageDescription
 let package = Package(
   name: "FerryWebInstaller",
   dependencies: [
-    .package(url: "https://github.com/Vitorsilveira31/SwiftUIWeb.git", from: "0.1.46")
+    // jbisfun fork: Return submits fields inside a Form (upstream 0.1.46 leaves it to implicit form submission).
+    .package(url: "https://github.com/jbisfun/SwiftUIWeb.git", branch: "ferry-0.1.46")
   ],
   targets: [
     .executableTarget(

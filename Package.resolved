@@ -1,5 +1,5 @@
 {
-  "originHash" : "9a433aa95d63888b2f5f7698b5fdd3431efc805a6b13fbae23305694916ad962",
+  "originHash" : "eb08559309c5d94215bc4f949fc13787acef66c0b967870830c2df1eec50041d",
   "pins" : [
     {
       "identity" : "swift-asn1",
@@ -22,10 +22,10 @@
     {
       "identity" : "swiftuiweb",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Vitorsilveira31/SwiftUIWeb.git",
+      "location" : "https://github.com/jbisfun/SwiftUIWeb.git",
       "state" : {
-        "revision" : "329d5cfdbee92a12147536c35ccc797caf8082b1",
-        "version" : "0.1.46"
+        "branch" : "ferry-0.1.46",
+        "revision" : "894404248d24ca3a991a3b1f42880431ee76680e"
       }
     }
   ],

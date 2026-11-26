@@ -55,6 +55,13 @@ struct TwoFactorAnswer: Codable {
   var devices: Bool?
 }
 
+/// Which section a device operation reports in: its progress and errors show next to
+/// the button that started it.
+enum Area: Equatable {
+  case device
+  case install
+}
+
 /// Drives the `device` page service (Resources/device-service.js), which runs the
 /// ios-webusb driver next to the page.
 @Observable
@@ -62,6 +69,7 @@ final class Installer {
   var device: DeviceSummary?
   var package: PackageSummary?
   var busy = ""
+  var area = Area.device
   var stage = ""
   var percent = 0.0
   var message = ""
@@ -72,6 +80,8 @@ final class Installer {
   var signingIn = false
   var accountFailure = ""
   var accountNotice = ""
+  /// A code was submitted and Apple is checking it.
+  var verifying = false
 
   private let service = BrowserService("device")
   private var observation: BrowserIOOperation?
@@ -108,7 +118,7 @@ final class Installer {
   }
 
   func pick() async {
-    await run("Reading the IPA") {
+    await run("Reading the IPA", in: .install) {
       if let picked = try await self.decode(PackageSummary.self, self.service.call("pickIpa")) {
         self.package = picked
         self.message = ""
@@ -120,7 +130,8 @@ final class Installer {
     guard let package else { return }
     stage = account == nil ? "upload" : "sign"
     percent = 0
-    await run(account == nil ? "Installing \(package.name)" : "Signing and installing \(package.name)") {
+    message = ""
+    await run(account == nil ? "Installing \(package.name)" : "Signing and installing \(package.name)", in: .install) {
       let result = try await self.decode(InstallResult.self, self.service.call("install"))
       if let error = result?.error {
         self.failure = error
@@ -150,12 +161,20 @@ final class Installer {
       accountFailure = "Sign-in failed. See the browser console."
     }
     twoFactor = nil
+    verifying = false
     signingIn = false
   }
 
-  /// An empty answer cancels the sign-in.
+  /// An empty answer cancels the sign-in. Asking for a new code keeps the prompt up:
+  /// Apple's next request replaces it.
   func answerTwoFactor(_ answer: TwoFactorAnswer) async {
-    twoFactor = nil
+    if answer.devices == true {
+      accountNotice = "A new code was sent to your trusted devices."
+    } else {
+      twoFactor = nil
+      verifying = answer.code != nil
+      accountNotice = ""
+    }
     let payload = (try? JSONEncoder().encode(answer)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
     _ = try? await service.call("twoFactor", payload)
   }
@@ -169,7 +188,8 @@ final class Installer {
     json.isEmpty ? nil : try JSONDecoder().decode(type, from: Data(json.utf8))
   }
 
-  private func run(_ label: String, _ work: @escaping () async throws -> Void) async {
+  private func run(_ label: String, in area: Area = .device, _ work: @escaping () async throws -> Void) async {
+    self.area = area
     busy = label
     failure = ""
     do { try await work() } catch let error as BrowserIOError {

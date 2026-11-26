@@ -6,17 +6,11 @@ struct ContentView: View {
   @State private var password = ""
   @State private var revokeCertificates = false
   @State private var code = ""
+  @FocusState private var codeFocused: Bool
 
   var body: some View {
     NavigationStack {
       Form {
-        // Status first, above the sections it reports on.
-        if !installer.busy.isEmpty {
-          Section { ProgressView(installer.busy) }
-        }
-        if !installer.failure.isEmpty {
-          Section { Text(installer.failure).foregroundStyle(.red) }
-        }
         accountSection
         deviceSection
         if installer.device != nil {
@@ -36,6 +30,7 @@ struct ContentView: View {
         LabeledContent("iOS", value: device.version)
         LabeledContent("UDID", value: device.udid)
         Button("Disconnect", role: .destructive) { Task { await installer.disconnect() } }
+          .disabled(!installer.busy.isEmpty)
       } else {
         Text("Connect an iPhone or iPad with a cable. The browser talks to it over WebUSB; nothing is installed on this computer.")
           .foregroundStyle(.secondary)
@@ -43,11 +38,45 @@ struct ContentView: View {
           .buttonStyle(.borderedProminent)
           .disabled(!installer.busy.isEmpty)
       }
+      status(for: .device)
     }
+  }
+
+  /// Progress and errors of the operations started in this section.
+  @ViewBuilder
+  private func status(for area: Area) -> some View {
+    if installer.area == area {
+      if !installer.busy.isEmpty && installer.stage.isEmpty {
+        BusyRow(label: installer.busy)
+      }
+      if !installer.failure.isEmpty {
+        Text(installer.failure).foregroundStyle(.red)
+      }
+    }
+  }
+
+  private func signIn() {
+    guard !installer.signingIn, !email.isEmpty, !password.isEmpty else { return }
+    let entered = password
+    password = ""
+    Task { await installer.signIn(email: email, password: entered, revokeCertificates: revokeCertificates) }
+  }
+
+  private func verify() {
+    guard code.count >= 6 else { return }
+    let entered = code
+    code = ""
+    Task { await installer.answerTwoFactor(TwoFactorAnswer(code: entered)) }
   }
 
   private var accountSection: some View {
     Section {
+      if !installer.accountFailure.isEmpty {
+        Text(installer.accountFailure).foregroundStyle(.red)
+      }
+      if !installer.accountNotice.isEmpty && installer.account == nil {
+        Text(installer.accountNotice).foregroundStyle(.secondary)
+      }
       if let account = installer.account {
         LabeledContent("Apple ID", value: account.email ?? "")
         if let name = account.name, !name.isEmpty { LabeledContent("Name", value: name) }
@@ -55,42 +84,41 @@ struct ContentView: View {
         Button("Sign Out", role: .destructive) { Task { await installer.signOut() } }
       } else if let request = installer.twoFactor {
         if let error = request.lastError { Text(error).foregroundStyle(.red) }
-        Text("Enter the verification code shown on your iPhone, iPad or Mac.")
-        Text("No code? On your iPhone open Settings > your name > Sign-In & Security > Get Verification Code.")
-          .foregroundStyle(.secondary)
-        TextField("Code", text: $code)
-        Button("Verify") {
-          let entered = code
-          code = ""
-          Task { await installer.answerTwoFactor(TwoFactorAnswer(code: entered)) }
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(code.count < 6)
+        TextField("Verification Code", text: $code)
+          .focused($codeFocused)
+          .onSubmit { verify() }
+          .onAppear { codeFocused = true }
+        Button("Verify") { verify() }
+          .buttonStyle(.borderedProminent)
+          .disabled(code.count < 6)
         // Codes only go to trusted devices: Apple refuses SMS requests from GrandSlam clients.
-        Button("Send a New Code") { Task { await installer.answerTwoFactor(TwoFactorAnswer(devices: true)) } }
+        Button("Send a New Code") {
+          code = ""
+          codeFocused = true
+          Task { await installer.answerTwoFactor(TwoFactorAnswer(devices: true)) }
+        }
         Button("Cancel", role: .destructive) { Task { await installer.answerTwoFactor(TwoFactorAnswer()) } }
+      } else if installer.signingIn {
+        BusyRow(label: installer.verifying ? "Verifying the code" : "Signing in to \(email)")
       } else {
         TextField("Email", text: $email)
         SecureField("Password", text: $password)
+          .onSubmit { signIn() }
         Toggle("Revoke an old certificate if the account has too many", isOn: $revokeCertificates)
-        Button(installer.signingIn ? "Signing In..." : "Sign In") {
-          let entered = password
-          password = ""
-          Task { await installer.signIn(email: email, password: entered, revokeCertificates: revokeCertificates) }
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(installer.signingIn || email.isEmpty || password.isEmpty)
-      }
-      if !installer.accountNotice.isEmpty && installer.account == nil {
-        Text(installer.accountNotice).foregroundStyle(.secondary)
-      }
-      if !installer.accountFailure.isEmpty {
-        Text(installer.accountFailure).foregroundStyle(.red)
+        Button("Sign In") { signIn() }
+          .buttonStyle(.borderedProminent)
+          .disabled(email.isEmpty || password.isEmpty)
       }
     } header: {
       Text("Apple ID")
     } footer: {
-      Text("Optional. With an Apple ID, apps are signed in this browser and work for 7 days (free accounts). Your password goes only to Apple: TLS runs in the page, and the relay forwards encrypted bytes.")
+      if installer.account == nil {
+        if installer.twoFactor != nil {
+          Text("Enter the code shown on your iPhone, iPad or Mac. No code? On your iPhone open Settings > your name > Sign-In & Security > Get Verification Code.")
+        } else {
+          Text("Optional. With an Apple ID, apps are signed in this browser and work for 7 days (free accounts). Your password goes only to Apple: TLS runs in the page, and the relay forwards encrypted bytes.")
+        }
+      }
     }
   }
 
@@ -117,12 +145,26 @@ struct ContentView: View {
       if !installer.message.isEmpty {
         Text(installer.message).foregroundStyle(.green)
       }
+      status(for: .install)
     } header: {
       Text("Install")
     } footer: {
       Text(installer.account == nil
         ? "Without an Apple ID the IPA must already be signed for this device."
         : "Registers this device and App IDs with your team, signs the IPA here and installs it.")
+    }
+  }
+}
+
+/// A spinner with its label beside it: SwiftUIWeb's indeterminate `ProgressView(_:)` keeps
+/// the label for assistive technology only.
+struct BusyRow: View {
+  let label: String
+
+  var body: some View {
+    HStack(spacing: 10) {
+      ProgressView()
+      Text(label).foregroundStyle(.secondary)
     }
   }
 }

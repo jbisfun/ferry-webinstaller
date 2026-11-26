@@ -17,6 +17,9 @@
       return btoa(text);
     };
 
+    const CLIENT_INFO = "<MacBookPro18,3> <Mac OS X;26.6;25F84> <com.apple.AuthKit/1 (com.apple.akd/1.0)>";
+    const USER_AGENT = "AuthKit/1 (Macintosh; OS X 26.6) (com.apple.akd/1.0)";
+
     let device = null;
     let ipa = null;
     let account = null;
@@ -125,8 +128,13 @@
           const { email, password, revokeCertificates } = JSON.parse(payload);
           const net = await import("./anisette.js");
           net.installRelayFetch();
+          // Public anisette servers report old Macs (macOS 10.12), and for those Apple
+          // picks SMS 2FA and never pushes a code to trusted devices. Say we're a current Mac.
+          net.registerUserAgent(CLIENT_INFO, USER_AGENT);
           account = await driver.AppleAccount.login(email, password, {
             anisetteUrl: net.server(),
+            clientInfo: CLIENT_INFO,
+            userAgent: USER_AGENT,
             revokeCertificates: !!revokeCertificates,
             twoFactor: (params) =>
               new Promise((resolve) => {

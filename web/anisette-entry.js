@@ -30,8 +30,15 @@ async function curlFetch(url, init = {}) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-// Headers Chromium won't put on a fetch Request (they never reach the shim below).
-let appleUserAgent = null;
+// Chromium won't put User-Agent on a fetch Request, so the shim adds the one that
+// belongs to the request's X-Mme-Client-Info (Apple checks that they match).
+const userAgents = new Map();
+let serverUserAgent = null;
+
+/** Registers the User-Agent to send with requests carrying `clientInfo`. */
+export function registerUserAgent(clientInfo, userAgent) {
+  userAgents.set(clientInfo, userAgent);
+}
 
 /**
  * Routes the page's cross-origin `fetch` through libcurl.js, so code that only knows
@@ -39,9 +46,8 @@ let appleUserAgent = null;
  * anisette server. Same-origin requests use the browser as usual.
  *
  * Chromium strips User-Agent from Request objects, and GrandSlam wants the one that
- * matches the anisette client info, so the shim remembers `user_agent` from the
- * anisette server's /v3/client_info reply and adds it to requests that carry
- * X-Mme-Client-Info.
+ * matches the client info, so the shim adds it back: registered pairs
+ * (registerUserAgent) and the anisette server's own /v3/client_info reply.
  */
 export function installRelayFetch() {
   if (globalThis.fetch.ferryRelay) return;
@@ -51,7 +57,11 @@ export function installRelayFetch() {
     const url = new URL(request.url);
     if (url.origin === location.origin || url.protocol !== "https:") return browserFetch(input, init);
     const headers = Object.fromEntries(request.headers);
-    if (appleUserAgent && headers["x-mme-client-info"] && !headers["user-agent"]) headers["user-agent"] = appleUserAgent;
+    const clientInfo = headers["x-mme-client-info"];
+    if (clientInfo && !headers["user-agent"]) {
+      const userAgent = userAgents.get(clientInfo) ?? serverUserAgent;
+      if (userAgent) headers["user-agent"] = userAgent;
+    }
     const hasBody = !["GET", "HEAD"].includes(request.method);
     const body = hasBody ? new Uint8Array(await request.arrayBuffer()) : undefined;
     const lib = await curl();
@@ -59,7 +69,9 @@ export function installRelayFetch() {
     const bytes = await response.arrayBuffer();
     if (url.pathname.endsWith("/v3/client_info") && response.ok) {
       try {
-        appleUserAgent = JSON.parse(new TextDecoder().decode(bytes)).user_agent ?? appleUserAgent;
+        const info = JSON.parse(new TextDecoder().decode(bytes));
+        if (info.client_info && info.user_agent) userAgents.set(info.client_info, info.user_agent);
+        serverUserAgent = info.user_agent ?? serverUserAgent;
       } catch {}
     }
     // libcurl hands back the decoded body; don't let anyone decode it twice.
@@ -122,4 +134,4 @@ export function service() {
 }
 
 // For the page console and tests.
-globalThis.ferryAnisette = { anisette, curl, relayUrl, http, servers, installRelayFetch };
+globalThis.ferryAnisette = { anisette, curl, relayUrl, http, servers, installRelayFetch, registerUserAgent };

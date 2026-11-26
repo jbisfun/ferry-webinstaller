@@ -1,0 +1,36 @@
+[package]
+name = "ferry-sign"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "IPA signing for the browser: apple-codesign compiled with Emscripten"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+apple-codesign = { git = "https://github.com/jbisfun/apple-codesign", default-features = false }
+apple-bundles = "0.21"
+x509-certificate = "0.24"
+pem = "3.0"
+plist = "1.8"
+zip = { version = "8.6", default-features = false, features = ["deflate"] }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+base64 = "0.22"
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+
+# Fixes for wasm32-unknown-emscripten, kept as branches in jbisfun forks:
+# - is_executable: the target is both `unix` and `wasm`, so upstream implements the trait twice.
+# - ring 0.17: no SystemRandom for Emscripten, though getrandom supports it.
+# - cryptographic-message-syntax: reqwest has no blocking client on wasm; time-stamp requests error.
+[patch.crates-io]
+is_executable = { git = "https://github.com/jbisfun/is_executable", branch = "emscripten-1.0.6" }
+ring = { git = "https://github.com/jbisfun/ring", branch = "emscripten-0.17.14" }
+cryptographic-message-syntax = { git = "https://github.com/jbisfun/cryptography-rs", branch = "wasm-cms-0.27.0" }
+# Same workspace as the cms fork (its path dependency), so only one x509-certificate is built.
+x509-certificate = { git = "https://github.com/jbisfun/cryptography-rs", branch = "wasm-cms-0.27.0" }

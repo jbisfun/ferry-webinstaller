@@ -1,0 +1,9 @@
+{
+  "name": "ferry-webinstaller-web",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mercuryworkshop/wisp-js": "^0.5.3",
+    "plist": "^5.1.2"
+  }
+}

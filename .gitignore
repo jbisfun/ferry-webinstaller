@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+Resources/ios-webusb/
+Resources/anisette.js
+Resources/signer/
+web/node_modules/
+sign/target/

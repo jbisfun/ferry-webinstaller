@@ -1,0 +1,33 @@
+{
+  "originHash" : "9a433aa95d63888b2f5f7698b5fdd3431efc805a6b13fbae23305694916ad962",
+  "pins" : [
+    {
+      "identity" : "swift-asn1",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-asn1.git",
+      "state" : {
+        "revision" : "97fd57437fc94cfa6b62f2b8f84c50f433534e17",
+        "version" : "1.7.5"
+      }
+    },
+    {
+      "identity" : "swift-crypto",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-crypto.git",
+      "state" : {
+        "revision" : "f8fad2f95ad67b45f6340c0960e2396094d67e07",
+        "version" : "5.1.1"
+      }
+    },
+    {
+      "identity" : "swiftuiweb",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Vitorsilveira31/SwiftUIWeb.git",
+      "state" : {
+        "revision" : "329d5cfdbee92a12147536c35ccc797caf8082b1",
+        "version" : "0.1.46"
+      }
+    }
+  ],
+  "version" : 3
+}

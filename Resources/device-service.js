@@ -137,16 +137,15 @@
           return accountSummary();
         }),
 
-      // payload: {"code"} | {"sms": id} | {"devices": true} | {"resend": true} | {} (abort).
+      // payload: {"code"} | {"devices": true} (push a new code) | {} (abort). No SMS:
+      // Apple refuses SMS requests from GrandSlam clients (HTTP 403).
       twoFactor(payload) {
         const answer = JSON.parse(payload || "{}");
         const resolve = pendingTwoFactor;
         pendingTwoFactor = null;
         resolve?.(
           answer.code ? { SubmitCode: answer.code }
-          : answer.sms != null ? { SendSms: answer.sms }
           : answer.devices ? "SendToDevices"
-          : answer.resend ? "ResendCode"
           : "Abort",
         );
       },

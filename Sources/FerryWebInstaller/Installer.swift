@@ -40,18 +40,9 @@ struct AccountSummary: Codable, Equatable {
   var error: String?
 }
 
-struct TrustedNumber: Codable, Equatable, Identifiable {
-  var numberWithDialCode: String
-  var id: Int
-}
-
 /// isideload's TwoFactorCallbackParams.
 struct TwoFactorRequest: Codable, Equatable {
   var lastError: String?
-  var unknown: Bool
-  var sms: Bool
-  var numbers: [TrustedNumber]
-  var selectedNumberId: Int?
 }
 
 struct InstallResult: Codable {
@@ -68,9 +59,7 @@ struct SignInRequest: Codable {
 
 struct TwoFactorAnswer: Codable {
   var code: String?
-  var sms: Int?
   var devices: Bool?
-  var resend: Bool?
 }
 
 /// Drives the `device` page service (Resources/device-service.js), which runs the

@@ -55,9 +55,7 @@ struct ContentView: View {
         Button("Sign Out", role: .destructive) { Task { await installer.signOut() } }
       } else if let request = installer.twoFactor {
         if let error = request.lastError { Text(error).foregroundStyle(.red) }
-        Text(request.sms
-          ? "Enter the code sent to \(request.numbers.first { $0.id == request.selectedNumberId }?.numberWithDialCode ?? "your phone")."
-          : "Enter the verification code shown on your Apple devices.")
+        Text("Enter the verification code shown on your iPhone, iPad or Mac.")
         TextField("Code", text: $code)
         Button("Verify") {
           let entered = code
@@ -66,17 +64,8 @@ struct ContentView: View {
         }
         .buttonStyle(.borderedProminent)
         .disabled(code.count < 6)
-        if request.sms || request.unknown {
-          Button("Send to My Devices") { Task { await installer.answerTwoFactor(TwoFactorAnswer(devices: true)) } }
-        }
-        ForEach(request.numbers.filter { $0.id != request.selectedNumberId }) { number in
-          Button("Text \(number.numberWithDialCode)") {
-            Task { await installer.answerTwoFactor(TwoFactorAnswer(sms: number.id)) }
-          }
-        }
-        if !request.unknown {
-          Button("Resend Code") { Task { await installer.answerTwoFactor(TwoFactorAnswer(resend: true)) } }
-        }
+        // Codes only go to trusted devices: Apple refuses SMS requests from GrandSlam clients.
+        Button("Send a New Code") { Task { await installer.answerTwoFactor(TwoFactorAnswer(devices: true)) } }
         Button("Cancel", role: .destructive) { Task { await installer.answerTwoFactor(TwoFactorAnswer()) } }
       } else {
         TextField("Email", text: $email)

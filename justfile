@@ -37,6 +37,6 @@ iwa-bundle: build
     cd web && bun iwa.mjs bundle
 
 # Release the IWA on GitHub Pages: docs/iwa/{update.json,ferry-<version>.swbn}, published
-# by the wiki at https://jbisfun.github.io/ferry-webinstaller/iwa/ (bump web/package.json first)
+# by the wiki at https://jbisfun.github.io/ferry-webinstaller/docs/iwa/ (bump web/package.json first)
 iwa-release: build
     cd web && bun iwa.mjs release

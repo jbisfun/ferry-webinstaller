@@ -12,7 +12,7 @@
 //                            http://127.0.0.1:8795/update.json in chrome://iwa-dev)
 //   bun iwa.mjs release   -> bundle for GitHub Pages and put update.json and the .swbn in
 //                            docs/iwa/, which the wiki publishes at
-//                            https://jbisfun.github.io/ferry-webinstaller/iwa/
+//                            https://jbisfun.github.io/ferry-webinstaller/docs/iwa/
 //
 // IWA_UPDATE_BASE is where update.json and the .swbn files are published (default
 // http://127.0.0.1:8795/): the app checks <base>update.json for new versions.
@@ -32,7 +32,7 @@ const root = resolve(import.meta.dir, "..");
 const source = join(root, ".build/browser/FerryWebInstaller");
 const out = join(root, ".build/iwa");
 const app = join(out, "app");
-export const PAGES_BASE = "https://jbisfun.github.io/ferry-webinstaller/iwa/";
+export const PAGES_BASE = "https://jbisfun.github.io/ferry-webinstaller/docs/iwa/";
 const command = process.argv[2] ?? "serve";
 const updateBase = (process.env.IWA_UPDATE_BASE ?? (command === "release" ? PAGES_BASE : "http://127.0.0.1:8795/")).replace(/\/?$/, "/");
 const version = JSON.parse(readFileSync(join(import.meta.dir, "package.json"), "utf8")).version ?? "0.1.0";

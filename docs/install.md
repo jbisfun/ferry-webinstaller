@@ -10,7 +10,7 @@ Direct Sockets. In that form it talks to Apple and the anisette server directly,
 relay or server in between. It installs from:
 
 ```
-https://jbisfun.github.io/ferry-webinstaller/iwa/update.json
+https://jbisfun.github.io/ferry-webinstaller/docs/iwa/update.json
 ```
 
 ## What you need
@@ -39,7 +39,7 @@ trust.
 1. Open `chrome://iwa-dev`. On older versions, use `chrome://web-app-internals` and scroll to
    *Isolated Web Apps*.
 2. Choose **Install IWA** → **Install from update manifest** (*Update manifest URL*).
-3. Paste `https://jbisfun.github.io/ferry-webinstaller/iwa/update.json`, pick the newest
+3. Paste `https://jbisfun.github.io/ferry-webinstaller/docs/iwa/update.json`, pick the newest
    version, and install.
 4. Open **Ferry** from `chrome://apps` or from your system's app launcher.
 

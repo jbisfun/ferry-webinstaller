@@ -75,7 +75,7 @@ Apple's root CAs to its bundle (`gsa.apple.com` chains to Apple Root CA).
 ## Without a relay: Isolated Web App
 
 Install guide: [docs/install.md](docs/install.md). The published app installs from
-`https://jbisfun.github.io/ferry-webinstaller/iwa/update.json`.
+`https://jbisfun.github.io/ferry-webinstaller/docs/iwa/update.json`.
 
 Installed as an [Isolated Web App](https://github.com/WICG/isolated-web-apps), the
 page gets the Direct Sockets API (`TCPSocket`), and libcurl.js uses it as its

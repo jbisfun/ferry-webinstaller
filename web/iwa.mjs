@@ -6,7 +6,16 @@
 //                            Chromium's dev-mode proxy install
 //   bun iwa.mjs bundle    -> prepare, then .build/iwa/ferry.swbn, signed with the key in
 //                            ~/.config/ferry-webinstaller/iwa-key.pem (made on first use;
-//                            the key fixes the app's isolated-app:// origin)
+//                            the key fixes the app's isolated-app:// origin), and the update
+//                            manifest .build/iwa/update.json listing it
+//   bun iwa.mjs publish   -> serve .build/iwa on :8795 (install from
+//                            http://127.0.0.1:8795/update.json in chrome://iwa-dev)
+//   bun iwa.mjs release   -> bundle for GitHub Pages and put update.json and the .swbn in
+//                            docs/iwa/, which the wiki publishes at
+//                            https://jbisfun.github.io/ferry-webinstaller/iwa/
+//
+// IWA_UPDATE_BASE is where update.json and the .swbn files are published (default
+// http://127.0.0.1:8795/): the app checks <base>update.json for new versions.
 //
 // The IWA runs under Chromium's fixed CSP (script-src 'self' 'wasm-unsafe-eval', base-uri
 // 'none', Trusted Types required), so the page shell's inline scripts become files and its
@@ -23,6 +32,9 @@ const root = resolve(import.meta.dir, "..");
 const source = join(root, ".build/browser/FerryWebInstaller");
 const out = join(root, ".build/iwa");
 const app = join(out, "app");
+export const PAGES_BASE = "https://jbisfun.github.io/ferry-webinstaller/iwa/";
+const command = process.argv[2] ?? "serve";
+const updateBase = (process.env.IWA_UPDATE_BASE ?? (command === "release" ? PAGES_BASE : "http://127.0.0.1:8795/")).replace(/\/?$/, "/");
 const version = JSON.parse(readFileSync(join(import.meta.dir, "package.json"), "utf8")).version ?? "0.1.0";
 
 // What Chromium enforces on every IWA response; the dev server sends the same.
@@ -46,6 +58,7 @@ const manifest = {
   scope: "/",
   display: "standalone",
   version,
+  update_manifest_url: `${updateBase}update.json`,
   icons: [{ src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" }],
   permissions_policy: {
     "cross-origin-isolated": ["self"],
@@ -141,13 +154,45 @@ async function bundle() {
     builder.addExchange(origin + path.slice(1), 200, { "Content-Type": typeOf(file), ...IWA_HEADERS }, new Uint8Array(readFileSync(file)));
   }
   const signed = await wbnSign.SignedWebBundle.fromWebBundle(builder.createBundle(), [new wbnSign.NodeCryptoSigningStrategy(key)]);
-  const target = join(out, "ferry.swbn");
+  const name = `ferry-${version}.swbn`;
+  const target = join(out, name);
   writeFileSync(target, signed.getSignedWebBundleBytes());
-  console.log(`signed bundle: ${target}\nweb bundle ID: ${signed.getWebBundleId()} (${origin})`);
+  rmSync(join(out, "ferry.swbn"), { force: true });
+  cpSync(target, join(out, "ferry.swbn"));
+  // The update manifest the installed app polls (manifest.update_manifest_url).
+  writeFileSync(join(out, "update.json"), JSON.stringify({ versions: [{ version, src: `${updateBase}${name}` }] }, null, 2) + "\n");
+  console.log(`signed bundle: ${target}\nupdate manifest: ${join(out, "update.json")} (published at ${updateBase}update.json)\nweb bundle ID: ${signed.getWebBundleId()} (${origin})`);
 }
 
-const command = process.argv[2] ?? "serve";
+function publish(port = 8795) {
+  Bun.serve({
+    port,
+    hostname: "127.0.0.1",
+    fetch(request) {
+      const name = decodeURIComponent(new URL(request.url).pathname).replace(/^\/+/, "");
+      const file = join(out, name);
+      if (!/^[\w.-]+\.(swbn|json)$/.test(name) || !existsSync(file)) return new Response("not found", { status: 404 });
+      const type = name.endsWith(".json") ? "application/json" : "application/octet-stream";
+      return new Response(Bun.file(file), { headers: { "Content-Type": type, "Cache-Control": "no-cache" } });
+    },
+  });
+  console.log(`IWA updates: http://127.0.0.1:${port}/update.json`);
+}
+
+/** The published release: docs/iwa holds the update manifest and only the current bundle. */
+async function release() {
+  await bundle();
+  const docs = join(root, "docs/iwa");
+  mkdirSync(docs, { recursive: true });
+  for (const name of readdirSync(docs)) if (name.endsWith(".swbn")) rmSync(join(docs, name));
+  cpSync(join(out, `ferry-${version}.swbn`), join(docs, `ferry-${version}.swbn`));
+  cpSync(join(out, "update.json"), join(docs, "update.json"));
+  console.log(`release ${version}: ${docs} -> ${updateBase}update.json`);
+}
+
 if (command === "prepare") prepare();
 else if (command === "serve") serve(Number(process.argv[3]) || 8794);
 else if (command === "bundle") await bundle();
-else throw new Error(`unknown command ${command}: prepare | serve | bundle`);
+else if (command === "publish") publish(Number(process.argv[3]) || 8795);
+else if (command === "release") await release();
+else throw new Error(`unknown command ${command}: prepare | serve | bundle | publish | release`);

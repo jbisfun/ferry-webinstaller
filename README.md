@@ -74,6 +74,9 @@ Apple's root CAs to its bundle (`gsa.apple.com` chains to Apple Root CA).
 
 ## Without a relay: Isolated Web App
 
+Install guide: [docs/install.md](docs/install.md). The published app installs from
+`https://jbisfun.github.io/ferry-webinstaller/iwa/update.json`.
+
 Installed as an [Isolated Web App](https://github.com/WICG/isolated-web-apps), the
 page gets the Direct Sockets API (`TCPSocket`), and libcurl.js uses it as its
 transport (`web/direct-socket.js`): TLS still runs in the page, and its bytes go
@@ -83,7 +86,12 @@ kind. Outside an IWA the page falls back to the Wisp relay.
 ```sh
 just iwa          # serves the IWA with Chromium's IWA headers on http://127.0.0.1:8794/
 just iwa-bundle   # .build/iwa/ferry.swbn, signed with ~/.config/ferry-webinstaller/iwa-key.pem
+just iwa-release  # docs/iwa/{update.json,ferry-<version>.swbn} for GitHub Pages
 ```
+
+A release bumps `version` in `web/package.json`, runs `just iwa-release` and commits
+`docs/iwa/`; the wiki copies `docs/` to `https://jbisfun.github.io/ferry-webinstaller/`,
+and installed apps update from the new `update.json`.
 
 `web/iwa.mjs` turns the bundle into an IWA. It moves the page shell's inline
 scripts into files, because the IWA's fixed CSP has no hashes. It drops `<base>`
